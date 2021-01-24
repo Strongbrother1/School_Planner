@@ -129,7 +129,10 @@ def scrape_classes():
 
                 current_class["class_id"], current_class["class_name"] = get_class_name(ucla_class.find("h3").text.strip())
                 
-                if(r"(honors)" in current_class["class_name"].lower()):
+                if(r"honors" in current_class["class_name"].lower()):
+                    continue
+                
+                if(r"seminar" in current_class["class_name"].lower()):
                     continue
                 
                 units_desc = ucla_class.select("p")
@@ -166,4 +169,5 @@ def scrape_classes():
                 classes = classes.append(current_class, ignore_index=True)
                 
     return format_df(classes)
+                
                 

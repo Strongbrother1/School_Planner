@@ -14,9 +14,27 @@ class SqlManip():
         df.to_sql("classes", self.conn, if_exists = "replace", index = False)
         self._initiate_requisite()
         
+        create_table_query = """CREATE TABLE IF NOT EXISTS finished (course TEXT NOT NULL) """
+        self.c.execute(create_table_query)
+        self.close()
+        
     def _initiate_requisite(self, ):
         df = requisites.make_math_req()
         df.to_sql("math_req", self.conn, if_exists="replace", index=False)
+    
+    def get_finished(self):
+        get_finished_query = """SELECT course FROM finished"""
+        self.c.execute(get_finished_query)
+        finished = self.c.fetchall()
+        self.close()
+        
+        return finished
+    
+    def add_finished(self, course):
+        insert_query = """INSERT OR REPLACE INTO finished (course) VALUES (?)"""
+        self.c.execute(insert_query, (course,))
+        self.close()
+        
     
     def close(self):
         self.conn.commit()
@@ -44,11 +62,42 @@ class SqlManip():
         self.close()
         return classes # list of tuples [('MATH', '1')]
             
+    def get_req_courses_and_type(self):
+        query_required = """SELECT requisite_type, course FROM math_req"""
+        self.c.execute(query_required)
+        required = self.c.fetchall()
+        self.close()
+        req_dict = {}
+        for req in required:
+            req_classes = []
+            req = req[1].replace(r"'", "").replace(r"[", "").replace(r"]", "").split(r"/")
+            req_classes.extend(req)
+            req_dict[req[0]] = req_classes
+        return req_dict
+    
+    def get_req_courses(self):
+        query_required = """SELECT course FROM math_req"""
+        self.c.execute(query_required)
+        required = self.c.fetchall()
+        self.close()
+        req_classes = []
+        for req in required:
+            req = req[0].replace(r"'", "").replace(r"[", "").replace(r"]", "").split(r"/")
+            req_classes.extend(req)
+            
+        return req_classes
+    
+    def get_hours_num_prereqs(self, dept, course_id):
+        query = """SELECT hours, prereq_score FROM classes WHERE dept = ? AND class_id = ?"""
+        self.c.execute(query, (dept, course_id))
+        hours_prereq = self.c.fetchone()
+        self.close()
+        return hours_prereq
 # ooga = SqlManip()
 # ooga.get_desc('31A', 'MATH')
 # SqlManip().get_classes()
-
+# print(SqlManip().get_req_courses())
+# print(SqlManip().get_finished())
 if __name__ == "__main__":
     SqlManip()._initiate()
-    # SqlManip()._initiate_requisite()
-
+# #     # SqlManip()._initiate_requisite()

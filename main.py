@@ -3,7 +3,7 @@ import sys
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5 import QtCore, QtWidgets, Qt
-
+import algorithm
 import sql_manip as Turtal
 
 class WidgetMimeData(QtCore.QMimeData):
@@ -51,6 +51,9 @@ class DraggableWidget(QGroupBox):
     
     def destroy(self):
         self.close()
+        
+    def text(self):
+        return self.title()
 
 class DroppableWidget(QGroupBox):
     def __init__(self, *args, **kwargs):
@@ -69,7 +72,8 @@ class DroppableWidget(QGroupBox):
         item = event.source()
         self.addWidget(item)
         event.acceptProposedAction()
-
+        Turtal.SqlManip().add_finished(item.text())
+        
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -91,7 +95,8 @@ class MainWindow(QMainWindow):
         self._central_widget.setLayout(self.general_layout)
         self._create_class_buttons()
         self.create_grid_layout()
-        self.setGeometry(450, 200, 700, 600)
+        self._create_recommendation_widget()
+        self.setGeometry(450, 10, 700, 600)
         self.show()
         
     def _create_class_buttons(self):
@@ -103,8 +108,32 @@ class MainWindow(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidget(self._all_buttons_groupbox)
         scroll.setWidgetResizable(True)
-        scroll.setFixedHeight(600)
+        scroll.setMinimumWidth(240)
         self.general_layout.addWidget(scroll, 1, 2)
+        
+    def _create_recommendation_widget(self):
+        self.recc_groupbox = QGroupBox("Recommended Courses")
+        self.recc_groupbox.setStyleSheet("QGroupBox { border: 1x solid black};")
+        self.recc_layout = QHBoxLayout()
+        # recc_droppables = []
+        
+        self._refresh_recommended()
+        
+        refresh_button = QPushButton("Refresh")
+        self.recc_layout.addWidget(refresh_button)
+        refresh_button.clicked.connect(self._refresh_recommended)
+        
+    def _refresh_recommended(self):
+        # for butt in self.recc_droppables:
+            # butt.close()
+        recc_droppables = []
+        j=0
+        for i in algorithm.get_recommended_classes():
+            recc_droppables.append(self._make_class_widget(i[0], i[1]))
+            self.recc_layout.addWidget(recc_droppables[j])
+            j+=1
+        self.recc_groupbox.setLayout(self.recc_layout)
+        self.general_layout.addWidget(self.recc_groupbox, 0, 2)
         
     def create_grid_layout(self):
         self.quarter_groupbox = QGroupBox("4-Year Schedule")
@@ -117,23 +146,24 @@ class MainWindow(QMainWindow):
         
         # making the droppable areas for the quarters
         self.quarter_droppables = []
-        for i in range(0, 4):
+        for i in range(0, 3):
             temp = []
-            for j in range(0, 3):
+            for j in range(0, 4):
                 temp.append(DroppableWidget())
+                temp[j].setMinimumSize(200,315)
                 self.quarter_layout.addWidget(temp[j], i+1, j+1)
             self.quarter_droppables.append(temp)
 
-        self.quarter_layout.addWidget(QLabel("Sem 1"), 0, 1)
-        self.quarter_layout.addWidget(QLabel("Sem 2"), 0, 2)
-        self.quarter_layout.addWidget(QLabel("Sem 3"), 0, 3)
-        self.quarter_layout.addWidget(QLabel("Year 1"), 1, 0)
-        self.quarter_layout.addWidget(QLabel("Year 2"), 2, 0)
-        self.quarter_layout.addWidget(QLabel("Year 3"), 3, 0)
-        self.quarter_layout.addWidget(QLabel("Year 4"), 4, 0)
+        self.quarter_layout.addWidget(QLabel("Sem 1"), 1, 0)
+        self.quarter_layout.addWidget(QLabel("Sem 2"), 2, 0)
+        self.quarter_layout.addWidget(QLabel("Sem 3"), 3, 0)
+        self.quarter_layout.addWidget(QLabel("Year 1"), 0, 1)
+        self.quarter_layout.addWidget(QLabel("Year 2"), 0, 2)
+        self.quarter_layout.addWidget(QLabel("Year 3"), 0, 3)
+        self.quarter_layout.addWidget(QLabel("Year 4"), 0, 4)
 
         self.quarter_groupbox.setLayout(self.quarter_layout)
-        self.general_layout.addWidget(self.quarter_groupbox, 1, 1)
+        self.general_layout.addWidget(self.quarter_groupbox, 0, 1, 2, 1)
         
     def _make_class_widget(self, dept, class_id):
         grades = {"pnp": r"P/NP",
@@ -153,6 +183,15 @@ class MainWindow(QMainWindow):
         
         current_class.addWidget(QLabel(f"{grades[grade_type]} Grading"))
         current_class.addWidget(units_hrs)
+        
+        req_courses = Turtal.SqlManip().get_req_courses_and_type()
+        for req_type in req_courses.keys():
+            if f"{dept} {class_id}" in req_courses[req_type]:
+                required = QLabel(f"Course satisfies {req_type} degree requirement")
+                required.setStyleSheet("background-color: yellow")
+                current_class.addWidget(required)
+                break
+            
         desc_button = QPushButton("See Description", current_class)
         current_class.addWidget(desc_button)
         desc_button.clicked.connect((lambda: self._clicked(dept, class_id)))
@@ -195,12 +234,63 @@ class PopupWindow(QWidget):
         self.popup_layout.addWidget(coreq_label)
         self.popup_layout.addWidget(desc_label)
         self.setLayout(self.popup_layout)
+
+class IntroWindow(QWidget):
+
+    switch_window = QtCore.pyqtSignal()
+
+    def __init__(self):
+        QWidget.__init__(self)
+        self.initUI()
+
+    def initUI(self):
+        self.popup_layout = QVBoxLayout()
+        self.setWindowTitle("Turtle House")
+        self.setGeometry(350, 350, 10, 300)
+        self.show()
+        self.set_info()
+    
+    def set_info(self):
+        welcome = QLabel("Welcome to the Turtle House Planner!")
+        select_l = QLabel("Please select your major")
+
+        majors = ["Mathematics", "Chemistry", "Physics", "Computer Science", "Applied Mathematics"]
+        options = QComboBox()
+        options.addItems(majors)
+
+        button = QtWidgets.QPushButton('Start Planning!')
+        button.clicked.connect(lambda: self.switch())
+
+        self.popup_layout.addWidget(welcome)
+        self.popup_layout.addWidget(select_l)
+        self.popup_layout.addWidget(options)
+        self.popup_layout.addWidget(button)
+        self.setLayout(self.popup_layout)
+    
+    def switch(self):
+        self.switch_window.emit()
             
+class Controller():
+
+    def __init__(self):
+        pass
+
+    def show_intro(self):
+        self.intro = IntroWindow()
+        self.intro.switch_window.connect(self.show_main)
+        self.intro.show()
+
+    def show_main(self):
+        self.window = MainWindow()
+        self.intro.close()
+        self.window.show()
+
 def main():
-    app = QApplication(sys.argv)
-    gui = MainWindow()
-    gui.show()
+    app = QtWidgets.QApplication(sys.argv)
+    controller = Controller()
+    controller.show_intro()
     sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
     main()
